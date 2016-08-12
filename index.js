@@ -31,6 +31,24 @@ const fonts = {
 // #######################################################
 
 // #######################################################
+// STRING REPLACEMENT
+
+function replaceStrings(content, cdnizer){
+  // Get rid of '..' relative paths
+  // ie: replace any number of '../' with a single '/'
+  // We do this because cdnizer doesn't understand '../'
+  content = content.replace(/(\.\.\/)/g, '/');
+  // Use public CDNs for open-source libraries & fonts
+  content = content.replace(fonts.fa.path, fonts.fa.cdn);
+  // Replace GE fonts
+  content = content.replace(fonts.ge.path, fonts.ge.cdn);
+  // Replace component/library URLs
+  content = cdnizer(content);
+  // OK, we're done
+  return content;
+}
+
+// #######################################################
 // S3 UPLOADER
 // See https://www.npmjs.com/package/s3
 
@@ -80,28 +98,21 @@ module.exports = {
   endpoint: endpoint,
   cdnify: (options) => {
 
-    const cdnizer = cdnizerFactory({
-      defaultCDNBase: '//' + endpoint + '/' + options.name,
-      allowMin: false,
-      files: options.strings
-    });
-
     if(options.version){
+
+      // Set up the 'cdnizer' package
+      const cdnizer = cdnizerFactory({
+        defaultCDNBase: '//' + endpoint + '/' + options.name,
+        allowMin: false,
+        files: options.strings
+      });
+
       // Empty the /cdn directory
       fs.emptyDirSync(options.dest);
       // Change Template Strings to point to CDN assets
       for(let file in options.files){
         let content = fs.readFileSync(options.files[file], 'utf8');
-        // Get rid of '..' relative paths
-        // ie: replace any number of '../' with a single '/'
-        // We do this because cdnizer doesn't understand '../'
-        content = content.replace(/(\.\.\/)/g, '/');
-        // Use public CDNs for open-source libraries & fonts
-        content = content.replace(fonts.fa.path, fonts.fa.cdn);
-        // Replace GE fonts
-        content = content.replace(fonts.ge.path, fonts.ge.cdn);
-        // Replace component/library URLs
-        content = cdnizer(content);
+        content = replaceStrings(content, cdnizer);
         fs.outputFileSync(options.dest + options.files[file], content);
       }
       // Upload files to S3 Bucket
