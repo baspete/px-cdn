@@ -1,6 +1,6 @@
 'use strict';
 
-var s3 = require('s3'),
+const s3 = require('s3'),
     fs = require('fs-extra'),
     cdnizerFactory = require('cdnizer');
 
@@ -114,10 +114,15 @@ module.exports = {
       // Empty the /cdn directory
       fs.emptyDirSync(options.dest);
       // Change Template Strings to point to CDN assets
+
       for(let file in options.files){
-        let content = fs.readFileSync(options.files[file], 'utf8');
-        content = replaceStrings(content, cdnizer);
-        fs.outputFileSync(options.dest + options.files[file], content);
+        try {
+          let content = fs.readFileSync(options.root + options.files[file], 'utf8');
+          content = replaceStrings(content, cdnizer);
+          fs.outputFileSync(options.dest + options.files[file], content);
+        } catch(err){
+          console.log('No file found at ', options.root + options.files[file], ', skipping.');
+        }
       }
       // Upload files to S3 Bucket
       if(!options.dryrun){
