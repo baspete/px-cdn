@@ -76,6 +76,7 @@ function uploadFiles(options){
     deleteRemoved: true,
     s3Params: {
       Bucket: bucket,
+      // Path will be //<cdn>/<name>/<version>/
       Prefix: options.name + '/' + options.version + '/',
       'CacheControl': 'max-age=31536000, no-transform, public', // 1y
       // other options supported by putObject, except Body and ContentLength.
@@ -100,6 +101,9 @@ module.exports = {
 
     if(options.version){
 
+      // Defaults
+      options.dest = options.dest || './cdn/';
+
       // Set up the 'cdnizer' package
       const cdnizer = cdnizerFactory({
         defaultCDNBase: '//' + endpoint + '/' + options.name,
@@ -123,4 +127,4 @@ module.exports = {
       console.log('Please specify a version using the -v option');
     }
   }
-}
+};
