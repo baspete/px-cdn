@@ -129,7 +129,7 @@ module.exports = {
       } else {
         console.log('Parsing '+options.root+'. This may take some time');
       }
-      dir.readFiles(options.root, { match: /\.(html|css)$/ }, (err, content, filename, next) => {
+      dir.readFiles(options.root, /*{ match: /\.(html|css|)$/ },*/ (err, content, filename, next) => {
         let thisFile = filename.split(options.root)[1] || filename;
         content = replaceStrings(content, cdnizer);
         options.files.map((file)=> {
