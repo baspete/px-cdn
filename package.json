@@ -10,6 +10,7 @@
   "dependencies": {
     "cdnizer": "^1.1.6",
     "fs-extra": "^0.30.0",
+    "node-dir": "^0.1.16",
     "s3": "^4.4.0"
   }
 }

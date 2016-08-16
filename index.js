@@ -2,6 +2,7 @@
 
 const s3 = require('s3'),
     fs = require('fs-extra'),
+    dir = require('node-dir'),
     cdnizerFactory = require('cdnizer');
 
 // #######################################################
@@ -54,22 +55,28 @@ function replaceStrings(content, cdnizer){
 
 function uploadFiles(options){
 
-  const s3Client = s3.createClient({
+  let s3Config = {
     maxAsyncS3: 20,     // this is the default
     s3RetryCount: 3,    // this is the default
     s3RetryDelay: 1000, // this is the default
     multipartUploadThreshold: 20971520, // this is the default (20 MB)
     multipartUploadSize: 15728640, // this is the default (15 MB)
     s3Options: {
-      accessKeyId: options.credentials.accessKeyId || process.env.AWS_ACCESS_KEY,
-      secretAccessKey: options.credentials.secretAccessKey || process.env.AWS_SECRET_ACCESS_KEY,
-      httpOptions: {
-        proxy: options.proxy || process.env.HTTP_PROXY
-      }
+      accessKeyId: process.env.AWS_ACCESS_KEY,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY
       // any other options are passed to new AWS.S3()
       // See: http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/Config.html#constructor-property
     },
-  });
+  };
+  // If they've set a proxy, use it
+  if(process.env.HTTP_PROXY){
+    s3Config.s3Options.httpOptions = {
+      proxy: process.env.HTTP_PROXY
+    };
+  }
+
+  // This will create a client we can use to upload files to our bucket
+  let s3Client = s3.createClient(s3Config);
 
   const params = {
     localDir: options.dest, // which files to send to CDN
@@ -88,7 +95,9 @@ function uploadFiles(options){
     console.error('unable to upload build:', err);
   }).on('end', function() {
     console.log('uploaded', this.filesFound, 'files to', endpoint + '/' + options.name + '/' + options.version + '/');
-    fs.remove(options.dest);
+    if(!options.dryrun){
+      fs.remove(options.dest);
+    }
   });
 }
 
@@ -98,11 +107,11 @@ function uploadFiles(options){
 module.exports = {
   endpoint: endpoint,
   cdnify: (options) => {
-
     if(options.version){
 
       // Defaults
       options.dest = options.dest || './cdn/';
+      options.root = options.root || './';
 
       // Set up the 'cdnizer' package
       const cdnizer = cdnizerFactory({
@@ -113,21 +122,37 @@ module.exports = {
 
       // Empty the /cdn directory
       fs.emptyDirSync(options.dest);
-      // Change Template Strings to point to CDN assets
 
-      for(let file in options.files){
-        try {
-          let content = fs.readFileSync(options.root + options.files[file], 'utf8');
-          content = replaceStrings(content, cdnizer);
-          fs.outputFileSync(options.dest + options.files[file], content);
-        } catch(err){
-          console.log('No file found at ', options.root + options.files[file], ', skipping.');
+      // Change Template Strings to point to CDN assets
+      if(options.update){
+        console.log('Rewriting strings in '+options.root+'. This may take some time');
+      } else {
+        console.log('Parsing '+options.root+'. This may take some time');
+      }
+      dir.readFiles(options.root, { match: /\.(html|css)$/ }, (err, content, filename, next) => {
+        let thisFile = filename.split(options.root)[1] || filename;
+        content = replaceStrings(content, cdnizer);
+        options.files.map((file)=> {
+          // Copy matched files to /cdn
+          if(file === thisFile){
+            fs.outputFileSync(options.dest + thisFile, content);
+          }
+        });
+        if(options.update){
+          // update paths in options.root
+          fs.outputFileSync(filename, content) ;
         }
-      }
-      // Upload files to S3 Bucket
-      if(!options.dryrun){
-        uploadFiles(options);
-      }
+        next();
+      }, (err) => {
+        if(!err){
+          // Upload files to S3 Bucket
+          if(!options.dryrun){
+            uploadFiles(options);
+          }
+        } else {
+          console.log('Problem replacing template strings', err);
+        }
+      });
     } else {
       console.log('Please specify a version using the -v option');
     }
