@@ -28,6 +28,26 @@ const fonts = {
   }
 };
 
+// Default strings
+let defaults = [
+  {
+    file: '/polymer/polymer.html',
+    package: 'polymer',
+    cdn: '//polygit.org/polymer+:${version}/components/polymer/polymer.html'
+  },
+  {
+    file: 'bower_components/es6-promise/es6-promise.min.js',
+    package: 'es6-promise',
+    cdn: '//cdnjs.cloudflare.com/ajax/libs/es6-promise/${version}/es6-promise.min.js'
+  },
+  {
+    file: 'bower_components/webcomponentsjs/webcomponents-lite.js',
+    package: 'webcomponentsjs',
+    cdn: '//cdnjs.cloudflare.com/ajax/libs/webcomponentsjs/${version}/webcomponents-lite.min.js'
+  }
+];
+
+
 // END CONFIGURATION
 // #######################################################
 
@@ -47,6 +67,23 @@ function replaceStrings(content, cdnizer){
   content = cdnizer(content);
   // OK, we're done
   return content;
+}
+
+// Given a list of Px- component names (px-modal, px-dropdown, etc)
+// this function will add a cdnizer object to the 'strings' array
+// for each component pointing to the cdn version of that component.
+function addPxCdnStrings(strings, components){
+  if(components && components.length > 0){
+    for(let component in components){
+      let c = components[component];
+      strings.push({
+        file: 'bower_components/'+c+'/'+c+'.html',
+        package: c,
+        cdn: '//' + endpoint + '/predixdev/'+c+'/${version}/'+c+'.html'
+      });
+    }
+  }
+  return strings;
 }
 
 // #######################################################
@@ -112,6 +149,11 @@ module.exports = {
       // Defaults
       options.dest = options.dest || './cdn/';
       options.root = options.root || './';
+      options.strings = options.strings || [];
+      // Add strings for px components
+      options.strings = addPxCdnStrings(options.strings, options.px);
+      // Add default strings
+      options.strings = options.strings.concat(defaults);
 
       // Set up the 'cdnizer' package
       const cdnizer = cdnizerFactory({
