@@ -171,6 +171,9 @@ module.exports = {
       } else {
         console.log('Parsing '+options.root+'. This may take some time');
       }
+
+      // TODO: excludeDir
+
       dir.readFiles(options.root, /*{ match: /\.(html|css|)$/ },*/ (err, content, filename, next) => {
         let thisFile = filename.split(options.root)[1] || filename;
         content = replaceStrings(content, cdnizer);
@@ -188,8 +191,10 @@ module.exports = {
       }, (err) => {
         if(!err){
           // Upload files to S3 Bucket
-          if(!options.dryrun){
+          if(!options.dryrun && process.env.AWS_ACCESS_KEY && process.env.AWS_SECRET_ACCESS_KEY){
             uploadFiles(options);
+          } else {
+            console.log('Dry run completed.');
           }
         } else {
           console.log('Problem replacing template strings', err);
