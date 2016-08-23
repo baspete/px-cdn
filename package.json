@@ -10,9 +10,7 @@
   "dependencies": {
     "cdnizer": "^1.1.6",
     "fs-extra": "^0.30.0",
-    "s3": "^4.4.0"
-  },
-  "devDependencies": {
+    "s3": "^4.4.0",
     "vulcanize": "^1.14.8"
   }
 }
