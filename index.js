@@ -54,11 +54,11 @@ function fixPaths(content){
 
 function replaceStrings(content, cdnizer){
   // Use public CDNs for open-source libraries & fonts
-  // content = content.replace(fonts.fa.path, fonts.fa.cdn);
+  content = content.replace(fonts.fa.path, fonts.fa.cdn);
   // Replace GE fonts
-  // content = content.replace(fonts.ge.path, fonts.ge.cdn);
-  // Replace component/library URLs
-  // content = cdnizer(content);
+  content = content.replace(fonts.ge.path, fonts.ge.cdn);
+  // Replace any strings from the options.strings array
+  content = cdnizer(content);
   // OK, we're done
   return content;
 }
@@ -116,7 +116,7 @@ function uploadFiles(options){
     s3Params: {
       Bucket: bucket,
       // Path will be //<cdn>/<name>/<version>/
-      Prefix: options.name + '/' + options.version + '/',
+      Prefix: options.org + '/' + options.name + '/' + options.version + '/',
       'CacheControl': 'max-age=31536000, no-transform, public', // 1y
       // other options supported by putObject, except Body and ContentLength.
       // See: http://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/S3.html#putObject-property
@@ -124,9 +124,9 @@ function uploadFiles(options){
   };
 
   s3Client.uploadDir(params).on('error', function(err) {
-    console.error('unable to upload build:', err);
+    console.error('Unable to upload build:', err);
   }).on('end', function() {
-    console.log('uploaded', this.filesFound, 'files to', endpoint + '/' + options.name + '/' + options.version + '/');
+    console.log('Uploaded ' + this.progressMd5Total + 'KB vulcanized component to ' + endpoint + '/' + options.org + '/' + options.name + '/' + options.version + '/' + options.name + '.html');
     if(!options.dryrun){
       fs.remove(options.dest);
     }
@@ -143,25 +143,21 @@ module.exports = {
 
       // Defaults
       options.dest = 'cdn/';
-      options.root = options.root || './';
+      options.root = './';
       options.strings = options.strings || [];
-      // Add strings for px components
-      options.strings = addPxCdnStrings(options.strings, options.px);
       // Add default strings
       options.strings = options.strings.concat(defaults);
 
       // Set up the 'cdnizer' package
       const cdnizer = cdnizerFactory({
-        defaultCDNBase: '//' + endpoint + '/' + options.name,
+        defaultCDNBase: '//' + endpoint + '/' + options.org + '/' + options.name,
         allowMin: false,
         files: options.strings
       });
 
-
+      // TODO: If the Polymer team fixes the "excludes" array handling here
+      //       we could use that to point to other px- components on our CDN.
       var vulcan = new Vulcanize({
-        excludes: {
-          imports: options.excludes
-        },
         inlineScripts: true,
         inlineCss: true,
         stripComments: false
@@ -170,44 +166,35 @@ module.exports = {
       // Empty the /cdn directory
       fs.emptyDirSync(options.dest);
 
-      // TODO: from Runn
-      // 0. ../foo to bower_components/foo <-- THIS IS WHY I HATE HTML IMPORTS
-      // 1. replace all strings for px- stuff to point to cdn. leave non-px stuff alone
-      //    - might need to create a map instead
-      // 2. vulcanize, excluding px-stuff
-      // 3. upload vulcanized file
-      // 4. apps use vulcanized file
-
-      // Runn's wishlist:
-      // 1. use json instead of js
-      //   - get name & version from bower.json
-
-
-      // Copy files from options.root to options.dest, changing dependency paths so they actually work
+      // Copy files from options.root to cdn-tmp/, changing dependency paths so they actually work
       for(let file in options.files){
         try {
           let content = fs.readFileSync(options.root + options.files[file], 'utf8');
           content = fixPaths(content);
-          fs.outputFileSync(options.dest + options.files[file], content);
+          fs.outputFileSync('cdn-tmp/' + options.files[file], content);
         } catch(err){
           console.log('No file found at ', options.root + options.files[file], ', skipping.');
         }
       }
 
-      // vulcanize and change references
-      vulcan.process(options.dest + options.name + '.html', function(err, inlinedHtml) {
+      // Vulcanize, change strings and copy the resulting file to cdn/
+      vulcan.process('cdn-tmp/' + options.name + '.html', function(err, inlinedHtml) {
         if(!err){
+          // Change strings
           inlinedHtml = replaceStrings(inlinedHtml, cdnizer);
-          fs.outputFileSync(options.dest + options.name + '.vulcanized.html', inlinedHtml);
+          // Write file to cdn/
+          fs.outputFileSync(options.dest + options.name + '.html', inlinedHtml);
+          // Get rid of cdn-tmp/
+          fs.removeSync('cdn-tmp/');
+          // Upload contents of cdn/ to S3 Bucket
+          if(!options.dryrun && process.env.AWS_ACCESS_KEY && process.env.AWS_SECRET_ACCESS_KEY){
+            uploadFiles(options);
+          } else {
+            console.log('Dry run completed. Vulcanized file is in', options.dest);
+          }
         }
       });
 
-      // Upload files to S3 Bucket
-      if(!options.dryrun && process.env.AWS_ACCESS_KEY && process.env.AWS_SECRET_ACCESS_KEY){
-        uploadFiles(options);
-      } else {
-        console.log('Dry run completed. Files are in', options.dest);
-      }
     } else {
       console.log('Please specify a version using the -v option');
     }
