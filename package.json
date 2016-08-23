@@ -1,7 +1,7 @@
 {
-  "name": "predix-cdn",
+  "name": "px-cdn",
   "version": "1.0.0",
-  "description": "A module for rewriting template strings and uploading static assets to a CDN",
+  "description": "A module for rewriting template strings and px components CDN",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -10,7 +10,9 @@
   "dependencies": {
     "cdnizer": "^1.1.6",
     "fs-extra": "^0.30.0",
-    "node-dir": "^0.1.16",
     "s3": "^4.4.0"
+  },
+  "devDependencies": {
+    "vulcanize": "^1.14.8"
   }
 }

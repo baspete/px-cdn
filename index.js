@@ -2,7 +2,7 @@
 
 const s3 = require('s3'),
     fs = require('fs-extra'),
-    dir = require('node-dir'),
+    Vulcanize = require('vulcanize'),
     cdnizerFactory = require('cdnizer');
 
 // #######################################################
@@ -30,23 +30,13 @@ const fonts = {
 
 // Default strings
 let defaults = [
+  // THIS IS NOT A CDN! WHERE CAN I GET POLYMER ITSELF?
   {
-    file: '/polymer/polymer.html',
+    file: 'polymer/polymer.html',
     package: 'polymer',
     cdn: '//polygit.org/polymer+:${version}/components/polymer/polymer.html'
-  },
-  {
-    file: 'bower_components/es6-promise/es6-promise.min.js',
-    package: 'es6-promise',
-    cdn: '//cdnjs.cloudflare.com/ajax/libs/es6-promise/${version}/es6-promise.min.js'
-  },
-  {
-    file: 'bower_components/webcomponentsjs/webcomponents-lite.js',
-    package: 'webcomponentsjs',
-    cdn: '//cdnjs.cloudflare.com/ajax/libs/webcomponentsjs/${version}/webcomponents-lite.min.js'
   }
 ];
-
 
 // END CONFIGURATION
 // #######################################################
@@ -54,17 +44,21 @@ let defaults = [
 // #######################################################
 // STRING REPLACEMENT
 
-function replaceStrings(content, cdnizer){
+function fixPaths(content){
   // Get rid of '..' relative paths
   // ie: replace any number of '../' with a single '/'
   // We do this because cdnizer doesn't understand '../'
-  content = content.replace(/(\.\.\/)/g, '/');
+  // THIS IS SUPER-FRAGILE! DO WE ACTUALLY WANT TO GO DOWN THIS RABBIT HOLE?!
+  return content.replace(/(\.\.\/)(iron-|polymer|px-)/g, '../bower_components/$2');
+}
+
+function replaceStrings(content, cdnizer){
   // Use public CDNs for open-source libraries & fonts
-  content = content.replace(fonts.fa.path, fonts.fa.cdn);
+  // content = content.replace(fonts.fa.path, fonts.fa.cdn);
   // Replace GE fonts
-  content = content.replace(fonts.ge.path, fonts.ge.cdn);
+  // content = content.replace(fonts.ge.path, fonts.ge.cdn);
   // Replace component/library URLs
-  content = cdnizer(content);
+  // content = cdnizer(content);
   // OK, we're done
   return content;
 }
@@ -72,12 +66,13 @@ function replaceStrings(content, cdnizer){
 // Given a list of Px- component names (px-modal, px-dropdown, etc)
 // this function will add a cdnizer object to the 'strings' array
 // for each component pointing to the cdn version of that component.
+// OBVIOUSLY THIS WILL ONLY WORK IF THE ASSETS ARE ON THE CDN!
 function addPxCdnStrings(strings, components){
   if(components && components.length > 0){
     for(let component in components){
       let c = components[component];
       strings.push({
-        file: 'bower_components/'+c+'/'+c+'.html',
+        file: c+'/'+c+'.html',
         package: c,
         cdn: '//' + endpoint + '/predixdev/'+c+'/${version}/'+c+'.html'
       });
@@ -147,7 +142,7 @@ module.exports = {
     if(options.version){
 
       // Defaults
-      options.dest = options.dest || './cdn/';
+      options.dest = 'cdn/';
       options.root = options.root || './';
       options.strings = options.strings || [];
       // Add strings for px components
@@ -162,44 +157,57 @@ module.exports = {
         files: options.strings
       });
 
+
+      var vulcan = new Vulcanize({
+        excludes: {
+          imports: options.files
+        },
+        inlineScripts: true,
+        inlineCss: true,
+        stripComments: false
+      });
+
       // Empty the /cdn directory
       fs.emptyDirSync(options.dest);
 
-      // Change Template Strings to point to CDN assets
-      if(options.update){
-        console.log('Rewriting strings in '+options.root+'. This may take some time');
-      } else {
-        console.log('Parsing '+options.root+'. This may take some time');
+      // TODO: from Runn
+      // 0. ../foo to bower_components/foo <-- THIS IS WHY I HATE HTML IMPORTS
+      // 1. replace all strings for px- stuff to point to cdn. leave non-px stuff alone
+      //    - might need to create a map instead
+      // 2. vulcanize, excluding px-stuff
+      // 3. upload vulcanized file
+      // 4. apps use vulcanized file
+
+      // Runn's wishlist:
+      // 1. use json instead of js
+      //   - get name & version from bower.json
+
+
+      // Copy files from options.root to options.dest, changing dependency paths so they actually work
+      for(let file in options.files){
+        try {
+          let content = fs.readFileSync(options.root + options.files[file], 'utf8');
+          content = fixPaths(content);
+          fs.outputFileSync(options.dest + options.files[file], content);
+        } catch(err){
+          console.log('No file found at ', options.root + options.files[file], ', skipping.');
+        }
       }
 
-      // TODO: excludeDir
-
-      dir.readFiles(options.root, /*{ match: /\.(html|css|)$/ },*/ (err, content, filename, next) => {
-        let thisFile = filename.split(options.root)[1] || filename;
-        content = replaceStrings(content, cdnizer);
-        options.files.map((file)=> {
-          // Copy matched files to /cdn
-          if(file === thisFile){
-            fs.outputFileSync(options.dest + thisFile, content);
-          }
-        });
-        if(options.update){
-          // update paths in options.root
-          fs.outputFileSync(filename, content) ;
-        }
-        next();
-      }, (err) => {
+      // vulcanize and change references
+      vulcan.process(options.dest + options.name + '.html', function(err, inlinedHtml) {
         if(!err){
-          // Upload files to S3 Bucket
-          if(!options.dryrun && process.env.AWS_ACCESS_KEY && process.env.AWS_SECRET_ACCESS_KEY){
-            uploadFiles(options);
-          } else {
-            console.log('Dry run completed.');
-          }
-        } else {
-          console.log('Problem replacing template strings', err);
+          inlinedHtml = replaceStrings(inlinedHtml, cdnizer);
+          fs.outputFileSync(options.dest + options.name + '.vulcanized.html', inlinedHtml);
         }
       });
+
+      // Upload files to S3 Bucket
+      if(!options.dryrun && process.env.AWS_ACCESS_KEY && process.env.AWS_SECRET_ACCESS_KEY){
+        uploadFiles(options);
+      } else {
+        console.log('Dry run completed. Files are in', options.dest);
+      }
     } else {
       console.log('Please specify a version using the -v option');
     }
