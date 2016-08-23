@@ -160,7 +160,7 @@ module.exports = {
       var vulcan = new Vulcanize({
         inlineScripts: true,
         inlineCss: true,
-        stripComments: false
+        stripComments: true
       });
 
       // Empty the /cdn directory
