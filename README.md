@@ -4,6 +4,16 @@ The purpose of this module is to take a Predix UI component, vulcanize it, and u
 
 It provides some small optimizations, in that it attempts to refer to the CDN versions of Font-Awesome and GE Inspira.
 
+## Dependencies
+
+This package depends on the following environment variables being set:
+
+```
+process.env.AWS_ACCESS_KEY
+process.env.AWS_SECRET_ACCESS_KEY
+process.env.HTTP_PROXY
+```
+
 ## Usage
 
 This package is meant to be passed an options object with the following properties:
