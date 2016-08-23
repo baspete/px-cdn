@@ -160,7 +160,7 @@ module.exports = {
 
       var vulcan = new Vulcanize({
         excludes: {
-          imports: options.files
+          imports: options.excludes
         },
         inlineScripts: true,
         inlineCss: true,
